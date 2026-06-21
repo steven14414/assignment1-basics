@@ -1,0 +1,15 @@
+import torch
+import torch.nn as nn
+from einops import rearrange, einsum
+
+
+class Linear(nn.Module):
+    def __init__(self, in_features, out_features, device=None, dtype=None):
+        factory_kwargs = {"device": device, "dtype": dtype}
+        super().__init__()
+        self.weight = nn.Parameter(torch.empty((out_features, in_features), **factory_kwargs))
+        std = (2 / (in_features + out_features)) ** 0.5
+        nn.init.trunc_normal_(self.weight, mean=0, std=std, a=-3 * std, b=3 * std)
+
+    def forward(self, x):
+        return einsum(x, self.weight, "... d_in,d_out d_in->... d_out")

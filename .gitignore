@@ -163,3 +163,5 @@ cython_debug/
 .uv-cache/
 data/
 *.zip
+.vscode/settings.json
+1.py
