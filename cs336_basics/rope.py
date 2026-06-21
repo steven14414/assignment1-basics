@@ -14,8 +14,8 @@ class Rope(nn.Module):
         inv_freq = theta ** (-torch.arange(0, d_k, 2, device=device) / d_k)
         positions = torch.arange(max_seq_len, device=device)
         angles = einsum(positions, inv_freq, "max_seq_len,d_k->max_seq_len d_k")
-        self.register_buffer("cos", torch.cos(angles))
-        self.register_buffer("sin", torch.sin(angles))
+        self.register_buffer("cos", torch.cos(angles), persistent=False)
+        self.register_buffer("sin", torch.sin(angles), persistent=False)
 
     def forward(self, x: torch.Tensor, token_positions: torch.Tensor) -> torch.Tensor:
         cos = self.cos[token_positions]

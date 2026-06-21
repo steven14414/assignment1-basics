@@ -1,6 +1,6 @@
 import torch
 import torch.nn as nn
-from einops import einsum, rearrange
+from einops import rearrange
 from .linear import Linear
 from .scaled_dot_product_attention import scaled_dot_product_attention
 from .rope import Rope
