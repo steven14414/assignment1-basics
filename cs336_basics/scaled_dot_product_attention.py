@@ -1,6 +1,4 @@
-from math import inf
-import torch
-from jaxtyping import Bool, Float, Int
+from jaxtyping import Bool, Float
 from torch import Tensor
 from .softmax import softmax
 
@@ -14,5 +12,5 @@ def scaled_dot_product_attention(
     d_k = K.shape[-1]
     scores = Q @ K.transpose(-2, -1) / (d_k**0.5)
     if mask is not None:
-        scores[~mask] = -inf
+        scores = scores.masked_fill(~mask, float("-inf"))
     return softmax(scores, -1) @ V
