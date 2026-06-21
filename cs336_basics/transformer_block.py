@@ -22,6 +22,7 @@ class Transformer_block(nn.Module):
 
     def forward(self, x):  # (B,T,D)
         B, T, D = x.shape
-        x = x + self.attn(self.ln1(x), torch.arange(T).unsqueeze(0).expand(B, T))
+        token_positions = torch.arange(T, device=x.device).unsqueeze(0).expand(B, T)
+        x = x + self.attn(self.ln1(x), token_positions)
         x = x + self.ffn(self.ln2(x))
         return x
