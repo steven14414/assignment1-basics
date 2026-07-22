@@ -18,7 +18,7 @@ _PARALLEL_MIN_BYTES = 1 << 20  # 1 MiB
 class Tokenizer:
     def __init__(self, vocab, merges, special_tokens=None):
         self.vocab = dict(vocab)
-        self.token_to_id = {token: id for id, token in self.vocab.items()}
+        self.token_to_id = {token: token_id for token_id, token in self.vocab.items()}
         self.merge_ranks = {pair: i for i, pair in enumerate(merges)}
         self.special_tokens = sorted(special_tokens or [], key=len, reverse=True)
         for token in self.special_tokens:
@@ -57,7 +57,7 @@ class Tokenizer:
         return cls(vocab, merges, special_tokens)
 
     def decode(self, ids: list[int]) -> str:
-        return b"".join(self.vocab[id] for id in ids).decode("utf-8", errors="replace")
+        return b"".join(self.vocab[token_id] for token_id in ids).decode("utf-8", errors="replace")
 
     def encode(self, text: str) -> list[int]:
         return list(self.encode_iterable([text]))

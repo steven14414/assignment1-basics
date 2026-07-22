@@ -3,7 +3,7 @@ import torch.nn as nn
 from einops import rearrange
 from .linear import Linear
 from .scaled_dot_product_attention import scaled_dot_product_attention
-from .rope import Rope
+from .rope import RoPE
 
 
 class MultiheadSelfAttention(nn.Module):
@@ -38,7 +38,7 @@ class MultiheadSelfAttentionWithRoPE(nn.Module):
         self.d_k = self.d_v = d_model // num_heads
         self.qkv_proj = Linear(d_model, d_model * 3)
         self.o_proj = Linear(d_model, d_model)
-        self.rope = Rope(theta, self.d_k, max_seq_len)
+        self.rope = RoPE(theta, self.d_k, max_seq_len)
 
     def forward(self, x, token_positions):
         QKV = self.qkv_proj(x)

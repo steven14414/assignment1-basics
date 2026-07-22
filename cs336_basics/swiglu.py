@@ -3,7 +3,7 @@ import torch.nn as nn
 from .linear import Linear
 
 
-def SiLU(x):
+def silu(x):
     return x * torch.sigmoid(x)
 
 
@@ -16,4 +16,4 @@ class SwiGLU(nn.Module):
         self.w3 = Linear(d_model, d_ff, **factory_kwargs)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        return self.w2(SiLU(self.w1(x)) * self.w3(x))
+        return self.w2(silu(self.w1(x)) * self.w3(x))

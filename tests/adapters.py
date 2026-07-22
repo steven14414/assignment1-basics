@@ -228,9 +228,9 @@ def run_rope(
     Returns:
         Float[Tensor, " ... sequence_length d_k"]: Tensor with RoPEd input.
     """
-    from cs336_basics.rope import Rope
+    from cs336_basics.rope import RoPE
 
-    rope = Rope(theta=theta, d_k=d_k, max_seq_len=max_seq_len, device=in_query_or_key.device)
+    rope = RoPE(theta=theta, d_k=d_k, max_seq_len=max_seq_len, device=in_query_or_key.device)
     return rope(in_query_or_key, token_positions)
 
 
@@ -473,9 +473,9 @@ def run_silu(in_features: Float[Tensor, " ..."]) -> Float[Tensor, " ..."]:
         Float[Tensor,"..."]: of with the same shape as `in_features` with the output of applying
         SiLU to each element.
     """
-    from cs336_basics.swiglu import SiLU
+    from cs336_basics.swiglu import silu
 
-    return SiLU(in_features)
+    return silu(in_features)
 
 
 def run_get_batch(

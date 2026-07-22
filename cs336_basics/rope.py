@@ -3,7 +3,7 @@ import torch.nn as nn
 from einops import einsum
 
 
-class Rope(nn.Module):
+class RoPE(nn.Module):
     cos: torch.Tensor
     sin: torch.Tensor
 
