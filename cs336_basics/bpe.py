@@ -1,14 +1,106 @@
+import json
 import os
 from collections import Counter, defaultdict
+from collections.abc import Iterable, Iterator
 from concurrent.futures import ProcessPoolExecutor
 from multiprocessing import cpu_count
+from pathlib import Path
 
 import regex as re
 
 from cs336_basics.pretokenization_example import find_chunk_boundaries
+from tests.common import gpt2_bytes_to_unicode
 
 PAT = r"""'(?:[sdmt]|ll|ve|re)| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+"""
 _PARALLEL_MIN_BYTES = 1 << 20  # 1 MiB
+
+
+class Tokenizer:
+    def __init__(self, vocab, merges, special_tokens=None):
+        self.vocab = dict(vocab)
+        self.token_to_id = {token: id for id, token in self.vocab.items()}
+        self.merge_ranks = {pair: i for i, pair in enumerate(merges)}
+        self.special_tokens = sorted(special_tokens or [], key=len, reverse=True)
+        for token in self.special_tokens:
+            token_bytes = token.encode("utf-8")
+            if token_bytes not in self.vocab.values():
+                token_id = len(self.vocab)
+                self.vocab[token_id] = token_bytes
+                self.token_to_id[token_bytes] = token_id
+
+        self._special_pattern = (
+            re.compile("|".join(re.escape(token) for token in self.special_tokens)) if self.special_tokens else None
+        )
+
+    @classmethod
+    def from_files(
+        cls,
+        vocab_filepath: str | Path,
+        merges_filepath: str | Path,
+        special_tokens: list[str] | None = None,
+    ) -> "Tokenizer":
+        byte_decoder = {v: k for k, v in gpt2_bytes_to_unicode().items()}
+
+        def str_to_bytes(s: str) -> bytes:
+            return bytes(byte_decoder[c] for c in s)
+
+        with open(vocab_filepath, encoding="utf-8") as f:
+            raw_vocab = json.load(f)
+        vocab = {int(token_id): str_to_bytes(token) for token, token_id in raw_vocab.items()}
+
+        merges: list[tuple[bytes, bytes]] = []
+        with open(merges_filepath, encoding="utf-8") as f:
+            for line in f:
+                parts = line.rstrip("\n").split(" ")
+                if len(parts) == 2:
+                    merges.append((str_to_bytes(parts[0]), str_to_bytes(parts[1])))
+        return cls(vocab, merges, special_tokens)
+
+    def decode(self, ids: list[int]) -> str:
+        return b"".join(self.vocab[id] for id in ids).decode("utf-8", errors="replace")
+
+    def encode(self, text: str) -> list[int]:
+        return list(self.encode_iterable([text]))
+
+    def encode_iterable(self, iterable: Iterable[str]) -> Iterator[int]:
+        for text in iterable:
+            yield from self._encode_text(text)
+
+    def _encode_text(self, text: str):
+        if self._special_pattern is None:
+            yield from self._encode_ordinary(text)
+            return
+        pos = 0
+        for match in self._special_pattern.finditer(text):
+            if match.start() > pos:
+                yield from self._encode_ordinary(text[pos : match.start()])
+            yield self.token_to_id[match.group().encode("utf-8")]
+            pos = match.end()
+        if pos < len(text):
+            yield from self._encode_ordinary(text[pos:])
+
+    def _encode_ordinary(self, text):
+        for match in re.finditer(PAT, text):
+            token = tuple(bytes([byte]) for byte in match.group().encode("utf-8"))
+            for bpe_token in self._apply_merges(token):
+                yield self.token_to_id[bpe_token]
+
+    def _apply_merges(self, token: tuple[bytes, ...]) -> tuple[bytes, ...]:
+        token_list = list(token)
+        while len(token_list) >= 2:
+            best_index = None
+            best_rank = None
+            for i, pair in enumerate(zip(token_list, token_list[1:])):
+                rank = self.merge_ranks.get(pair, None)
+                if rank is not None:
+                    if best_rank is None or rank < best_rank:
+                        best_index = i
+                        best_rank = rank
+            if best_rank is None:
+                break
+            else:
+                token_list[best_index : best_index + 2] = [token_list[best_index] + token_list[best_index + 1]]
+        return tuple(token_list)
 
 
 def _pretokenize_text(text: str, special_tokens: list[str] | None) -> Counter[bytes]:
