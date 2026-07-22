@@ -1,12 +1,17 @@
-import regex as re
+import os
 from collections import Counter, defaultdict
+from concurrent.futures import ProcessPoolExecutor
+from multiprocessing import cpu_count
+
+import regex as re
+
+from cs336_basics.pretokenization_example import find_chunk_boundaries
 
 PAT = r"""'(?:[sdmt]|ll|ve|re)| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+"""
+_PARALLEL_MIN_BYTES = 1 << 20  # 1 MiB
 
 
-def _count_pretokens(input_path, special_tokens) -> Counter[bytes]:
-    with open(input_path, encoding="utf-8") as f:
-        text = f.read()
+def _pretokenize_text(text: str, special_tokens: list[str] | None) -> Counter[bytes]:
     if special_tokens is None:
         pieces = [text]
     else:
@@ -16,6 +21,44 @@ def _count_pretokens(input_path, special_tokens) -> Counter[bytes]:
     for piece in pieces:
         for match in re.finditer(PAT, piece):
             counts[match.group().encode("utf-8")] += 1
+    return counts
+
+
+def _pretokenize_chunk(args: tuple[str, int, int, list[str] | None]) -> Counter[bytes]:
+    input_path, start, end, special_tokens = args
+    with open(input_path, "rb") as f:
+        f.seek(start)
+        chunk = f.read(end - start).decode("utf-8")
+    return _pretokenize_text(chunk, special_tokens)
+
+
+def _count_pretokens_serial(input_path, special_tokens) -> Counter[bytes]:
+    with open(input_path, encoding="utf-8") as f:
+        text = f.read()
+    return _pretokenize_text(text, special_tokens)
+
+
+def _count_pretokens(input_path, special_tokens) -> Counter[bytes]:
+    input_path = str(input_path)
+    file_size = os.path.getsize(input_path)
+    if file_size < _PARALLEL_MIN_BYTES or not special_tokens:
+        return _count_pretokens_serial(input_path, special_tokens)
+
+    num_processes = min(cpu_count() or 1, 64)
+    split_token = special_tokens[0].encode("utf-8")
+    with open(input_path, "rb") as f:
+        boundaries = find_chunk_boundaries(f, num_processes, split_token)
+
+    if len(boundaries) <= 2:
+        return _count_pretokens_serial(input_path, special_tokens)
+
+    tasks = [
+        (input_path, start, end, special_tokens) for start, end in zip(boundaries[:-1], boundaries[1:], strict=False)
+    ]
+    counts: Counter[bytes] = Counter()
+    with ProcessPoolExecutor(max_workers=len(tasks)) as executor:
+        for partial in executor.map(_pretokenize_chunk, tasks, chunksize=1):
+            counts.update(partial)
     return counts
 
 
