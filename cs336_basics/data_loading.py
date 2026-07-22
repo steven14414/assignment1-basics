@@ -9,6 +9,6 @@ def get_batch(
     start_indices = np.random.randint(0, len(dataset) - context_length, size=batch_size)
     input_indices = start_indices[:, None] + np.arange(0, context_length)[None, :]
     label_indices = input_indices + 1
-    inputs = torch.Tensor(dataset[input_indices]).to(device)
-    labels = torch.Tensor(dataset[label_indices]).to(device)
+    inputs = torch.tensor(dataset[input_indices], dtype=torch.long, device=device)
+    labels = torch.tensor(dataset[label_indices], dtype=torch.long, device=device)
     return inputs, labels
