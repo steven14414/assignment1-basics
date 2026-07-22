@@ -6,7 +6,7 @@ from .scaled_dot_product_attention import scaled_dot_product_attention
 from .rope import Rope
 
 
-class Multihead_self_attention(nn.Module):
+class MultiheadSelfAttention(nn.Module):
     def __init__(self, d_model: int, num_heads: int):
         super().__init__()
         assert d_model % num_heads == 0
@@ -29,7 +29,7 @@ class Multihead_self_attention(nn.Module):
         return self.o_proj(out)
 
 
-class Multihead_self_attention_with_rope(nn.Module):
+class MultiheadSelfAttentionWithRoPE(nn.Module):
     def __init__(self, d_model: int, num_heads: int, max_seq_len: int, theta: float):
         super().__init__()
         assert d_model % num_heads == 0

@@ -165,3 +165,4 @@ data/
 *.zip
 .vscode/settings.json
 1.py
+wandb/

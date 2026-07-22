@@ -2,11 +2,11 @@ import torch.nn as nn
 
 from .embedding import Embedding
 from .rmsnorm import RMSNorm
-from .transformer_block import Transformer_block
+from .transformer_block import TransformerBlock
 from .linear import Linear
 
 
-class Transformer_lm(nn.Module):
+class TransformerLM(nn.Module):
     def __init__(
         self,
         vocab_size: int,
@@ -20,7 +20,7 @@ class Transformer_lm(nn.Module):
         super().__init__()
         self.token_embeddings = Embedding(vocab_size, d_model)
         self.layers = nn.ModuleList(
-            [Transformer_block(d_model, num_heads, d_ff, context_length, rope_theta) for _ in range(num_layers)]
+            [TransformerBlock(d_model, num_heads, d_ff, context_length, rope_theta) for _ in range(num_layers)]
         )
         self.ln_final = RMSNorm(d_model)
         self.lm_head = Linear(d_model, vocab_size)

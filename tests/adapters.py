@@ -152,9 +152,9 @@ def run_multihead_self_attention(
         Float[Tensor, " ... sequence_length d_model"]: Tensor with the output of running your optimized, batched multi-headed attention
         implementation with the given QKV projection weights and input features.
     """
-    from cs336_basics.multihead_self_attention import Multihead_self_attention
+    from cs336_basics.multihead_self_attention import MultiheadSelfAttention
 
-    multihead_self_attention = Multihead_self_attention(d_model=d_model, num_heads=num_heads)
+    multihead_self_attention = MultiheadSelfAttention(d_model=d_model, num_heads=num_heads)
     multihead_self_attention.qkv_proj.weight.data = torch.cat((q_proj_weight, k_proj_weight, v_proj_weight), dim=0)
     multihead_self_attention.o_proj.weight.data = o_proj_weight
     return multihead_self_attention(in_features)
@@ -197,9 +197,9 @@ def run_multihead_self_attention_with_rope(
         Float[Tensor, " ... sequence_length d_model"]: Tensor with the output of running your optimized, batched multi-headed attention
         implementation with the given QKV projection weights and input features.
     """
-    from cs336_basics.multihead_self_attention import Multihead_self_attention_with_rope
+    from cs336_basics.multihead_self_attention import MultiheadSelfAttentionWithRoPE
 
-    multihead_self_attention_with_rope = Multihead_self_attention_with_rope(
+    multihead_self_attention_with_rope = MultiheadSelfAttentionWithRoPE(
         d_model=d_model, num_heads=num_heads, max_seq_len=max_seq_len, theta=theta
     )
     multihead_self_attention_with_rope.qkv_proj.weight.data = torch.cat(
@@ -304,9 +304,9 @@ def run_transformer_block(
         Float[Tensor, "batch sequence_length d_model"] Tensor with the output of
         running the Transformer block on the input features while using RoPE.
     """
-    from cs336_basics.transformer_block import Transformer_block
+    from cs336_basics.transformer_block import TransformerBlock
 
-    block = Transformer_block(d_model, num_heads, d_ff, max_seq_len, theta)
+    block = TransformerBlock(d_model, num_heads, d_ff, max_seq_len, theta)
     converted = {
         "attn.qkv_proj.weight": torch.cat(
             [
@@ -406,9 +406,9 @@ def run_transformer_lm(
         Float[Tensor, "batch_size sequence_length vocab_size"]: Tensor with the predicted unnormalized
         next-word distribution for each token.
     """
-    from cs336_basics.transformer_lm import Transformer_lm
+    from cs336_basics.transformer_lm import TransformerLM
 
-    lm = Transformer_lm(vocab_size, context_length, d_model, num_layers, num_heads, d_ff, rope_theta)
+    lm = TransformerLM(vocab_size, context_length, d_model, num_layers, num_heads, d_ff, rope_theta)
     converted = {
         "token_embeddings.weight": weights["token_embeddings.weight"],
         "ln_final.weight": weights["ln_final.weight"],

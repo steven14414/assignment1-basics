@@ -1,11 +1,11 @@
 import torch
 import torch.nn as nn
 from .rmsnorm import RMSNorm
-from .multihead_self_attention import Multihead_self_attention_with_rope
+from .multihead_self_attention import MultiheadSelfAttentionWithRoPE
 from .swiglu import SwiGLU
 
 
-class Transformer_block(nn.Module):
+class TransformerBlock(nn.Module):
     def __init__(
         self,
         d_model: int,
@@ -16,7 +16,7 @@ class Transformer_block(nn.Module):
     ):
         super().__init__()
         self.ln1 = RMSNorm(d_model)
-        self.attn = Multihead_self_attention_with_rope(d_model, num_heads, max_seq_len, theta)
+        self.attn = MultiheadSelfAttentionWithRoPE(d_model, num_heads, max_seq_len, theta)
         self.ln2 = RMSNorm(d_model)
         self.ffn = SwiGLU(d_model, d_ff)
 
