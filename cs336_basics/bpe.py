@@ -3,7 +3,7 @@ import os
 from collections import Counter, defaultdict
 from collections.abc import Iterable, Iterator
 from concurrent.futures import ProcessPoolExecutor
-from multiprocessing import cpu_count
+from multiprocessing import cpu_count, get_context
 from pathlib import Path
 
 import regex as re
@@ -148,7 +148,7 @@ def _count_pretokens(input_path, special_tokens) -> Counter[bytes]:
         (input_path, start, end, special_tokens) for start, end in zip(boundaries[:-1], boundaries[1:], strict=False)
     ]
     counts: Counter[bytes] = Counter()
-    with ProcessPoolExecutor(max_workers=len(tasks)) as executor:
+    with ProcessPoolExecutor(max_workers=len(tasks), mp_context=get_context("forkserver")) as executor:
         for partial in executor.map(_pretokenize_chunk, tasks, chunksize=1):
             counts.update(partial)
     return counts
