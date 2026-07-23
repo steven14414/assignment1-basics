@@ -18,9 +18,28 @@ class RoPE(nn.Module):
         self.register_buffer("sin", torch.sin(angles), persistent=False)
 
     def forward(self, x: torch.Tensor, token_positions: torch.Tensor) -> torch.Tensor:
+        """Apply RoPE to x.
+
+        Args:
+            x: (..., seq_len, d_k). Extra leading dims (e.g. batch, num_heads) are allowed.
+            token_positions: (..., seq_len), position index for each token along seq_len.
+
+        Returns:
+            Same shape as x.
+        """
+        # Indexing lifts buffer dims: (max_seq, d_k//2) + pos (..., seq) -> (..., seq, d_k//2)
         cos = self.cos[token_positions]
         sin = self.sin[token_positions]
-        x_even = x[..., ::2]
+
+        # Multi-head attention passes Q/K as (B, num_heads, seq, d_k) while
+        # token_positions is (B, seq). cos/sin become (B, seq, d_k//2) and need
+        # an extra dim before seq so every head gets the same rotation.
+        if x.ndim == 4:
+            cos = cos.unsqueeze(1)  # (B, seq, d/2) -> (B, 1, seq, d/2)
+            sin = sin.unsqueeze(1)
+
+        # Rotate adjacent pairs: [x0, x1] -> [x0*cos - x1*sin, x0*sin + x1*cos]
+        x_even = x[..., ::2]  # (..., seq, d_k // 2)
         x_odd = x[..., 1::2]
         out = torch.empty_like(x)
         out[..., ::2] = x_even * cos - x_odd * sin
