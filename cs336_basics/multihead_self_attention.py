@@ -23,7 +23,7 @@ class MultiheadSelfAttention(nn.Module):
         K = rearrange(K, "B T (N H)->B N T H", H=self.d_k, N=self.num_heads)
         V = rearrange(V, "B T (N H)->B N T H", H=self.d_v, N=self.num_heads)
         T = Q.shape[-2]
-        mask = torch.tril(torch.ones(T, T, dtype=torch.bool))
+        mask = torch.tril(torch.ones(T, T, dtype=torch.bool, device=x.device))
         out = scaled_dot_product_attention(Q, K, V, mask)
         out = rearrange(out, "B N T H->B T (N H)")
         return self.o_proj(out)
@@ -49,7 +49,7 @@ class MultiheadSelfAttentionWithRoPE(nn.Module):
         T = Q.shape[-2]
         Q = self.rope(Q, token_positions)
         K = self.rope(K, token_positions)
-        mask = torch.tril(torch.ones(T, T, dtype=torch.bool))
+        mask = torch.tril(torch.ones(T, T, dtype=torch.bool, device=x.device))
         out = scaled_dot_product_attention(Q, K, V, mask)
         out = rearrange(out, "B N T H->B T (N H)")
         return self.o_proj(out)

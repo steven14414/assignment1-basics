@@ -93,7 +93,17 @@ def train(args):
     valid_data = np.load(args.valid_data, mmap_mode="r")
 
     model = TransformerLM(
-        args.vocab_size, args.context_length, args.d_model, args.num_layers, args.num_heads, args.d_ff, args.rope_theta
+        args.vocab_size,
+        args.context_length,
+        args.d_model,
+        args.num_layers,
+        args.num_heads,
+        args.d_ff,
+        args.rope_theta,
+        use_rmsnorm=not args.no_rmsnorm,
+        post_norm=args.post_norm,
+        use_rope=not args.no_rope,
+        ffn_type=args.ffn_type,
     ).to(args.device)
     optim = AdamW(model.parameters(), args.lr, args.weight_decay, (args.beta1, args.beta2), args.eps)
 
@@ -161,6 +171,12 @@ def parse_args():
     parser.add_argument("--num-layers", type=int, default=4)
     parser.add_argument("--num-heads", type=int, default=16)
     parser.add_argument("--rope-theta", type=float, default=10000.0)
+
+    # architecture ablations (section 7.3)
+    parser.add_argument("--no-rmsnorm", action="store_true")
+    parser.add_argument("--post-norm", action="store_true")
+    parser.add_argument("--no-rope", action="store_true")
+    parser.add_argument("--ffn-type", type=str, default="swiglu", choices=["swiglu", "silu"])
 
     # training
     parser.add_argument("--batch-size", type=int, default=64)
