@@ -12,15 +12,15 @@ TinyStories ~17M 参数 Transformer LM。实验分两轮：**g27 低资源**（4
 | Problem                   | 分值  | 手册 Deliverable（摘要）                        | 我们的交付物                                 | 状态    |
 | ------------------------- | --- | ----------------------------------------- | -------------------------------------- | ----- |
 | **experiment_log**        | 3   | logging code + experiment log 文档          | `train.py` + 本文档                       | ✅     |
-| **learning_rate (a)**     | 3   | LR curves + search strategy + val≤1.45 模型 | 全量 7 LR ✅；最佳 `ts_lr3em3` val=**1.331** | ✅     |
-| **learning_rate (b)**     | ↑   | 含 divergent run 的 LR curves + 分析          | 至 1e-2 未发散；2e-2/5e-2 🔄 g52       | ⚠️    |
-| **batch_size_experiment** | 1   | batch curves + 讨论                         | 低资源 bs=1/4/16；g68 bs=16/128 进行中        | ⚠️    |
+| **learning_rate (a)**     | 3   | LR curves + search strategy + val≤1.45 模型 | 全量 7 LR + **6e-3** ✅；最佳 `ts_bs64_lr6em3` val=**1.327** | ✅     |
+| **learning_rate (b)**     | ↑   | 含 divergent run 的 LR curves + 分析          | 全量至 5e-2 未 NaN；ablation 无 RMSNorm@3e-3 发散 | ⚠️    |
+| **batch_size_experiment** | 1   | batch curves + 讨论                         | 低资源 ✅；全量 bs16/64/128 + LR scaling ✅ | ✅     |
 | **generate**              | 1   | ≥256 tokens dump + fluency + 2 因素         | `generate_full/` 7 组 decoding         | ✅     |
-| **layer_norm_ablation**   | 1   | 无 RMSNorm curve + 评论                      | 低资源 ✅；g68 全量 🔄                        | ⚠️    |
-| **pre_norm_ablation**     | 1   | post-norm vs pre-norm curve               | 低资源 ✅；g68 全量 🔄                        | ⚠️    |
-| **no_pos_emb**            | 1   | RoPE vs NoPE curve                        | 低资源 ✅；g68 全量 🔄                        | ⚠️    |
-| **swiglu_ablation**       | 1   | SwiGLU vs SiLU curve + 讨论                 | 低资源 ✅；g68 全量 🔄                        | ⚠️    |
-| **main_experiment (OWT)** | 2   | OWT curve + 对比 + 生成分析                     | 未开始                                    | ❌     |
+| **layer_norm_ablation**   | 1   | 无 RMSNorm curve + 评论                      | 低资源 ✅；全量 lr=3e-4/3e-3 ✅               | ✅     |
+| **pre_norm_ablation**     | 1   | post-norm vs pre-norm curve               | 低资源 ✅；全量 lr=3e-4/3e-3 ✅               | ✅     |
+| **no_pos_emb**            | 1   | RoPE vs NoPE curve                        | 低资源 ✅；全量 lr=3e-4/3e-3 ✅               | ✅     |
+| **swiglu_ablation**       | 1   | SwiGLU vs SiLU curve + 讨论                 | 低资源 ✅；全量 lr=3e-4/3e-3 ✅               | ✅     |
+| **main_experiment (OWT)** | 2   | OWT curve + 对比 + 生成分析                     | 训练 ✅ + 生成 ✅（`generate_owt/`）              | ✅     |
 
 
 
@@ -65,17 +65,25 @@ TinyStories ~17M 参数 Transformer LM。实验分两轮：**g27 低资源**（4
 
 **交付：**
 
-- Search strategy：对数均匀扫描 `1e-5 … 1e-2`；固定 batch；cosine decay 在末 step 到 min_lr
-- **达标模型（全量）：**
+- Search strategy：对数均匀扫描 `1e-5 … 1e-2`（7 点）；固定 batch=64；后续在 batch-LR 实验中补跑 **6e-3**（同配置，纳入 LR curve）
+- **最佳模型（全量）：**
 
 
 | 项目               | 值                                                    |
 | ---------------- | ---------------------------------------------------- |
-| Run（最佳）          | `ts_lr3em3`                                          |
+| Run（最佳）          | `ts_bs64_lr6em3`                                     |
+| LR               | **6e-3**                                             |
+| Final valid loss | **1.327**                                            |
+| Checkpoint       | `experiments/section7/ts_bs64_lr6em3/checkpoint_final.pt` |
+| 配置               | batch=64, 20k steps, 327M tokens, ~63 min            |
+
+
+| 项目               | 值                                                    |
+| ---------------- | ---------------------------------------------------- |
+| Run（LR sweep 主扫） | `ts_lr3em3`                                          |
 | LR               | 3e-3                                                 |
 | Final valid loss | **1.331**                                            |
 | Checkpoint       | `experiments/section7/ts_lr3em3/checkpoint_final.pt` |
-| 配置               | batch=64, 20k steps, 327M tokens, ~64 min            |
 
 
 
@@ -103,9 +111,10 @@ TinyStories ~17M 参数 Transformer LM。实验分两轮：**g27 低资源**（4
 **交付：**
 
 - 低资源：lr=5e-3、1e-2 均未发散
-- 全量：lr=1e-2（`ts_lr1em2`, val=1.332）仍稳定，未出现 loss 爆炸或 NaN
+- 全量 baseline：lr 至 **5e-2**（`ts_lr_diverge_5em2`, val=1.608）仍无 NaN；2e-2（val=1.358）甚至接近最优
 - 全量最佳 lr=3e-3（1.331）优于 1e-2（1.332），最优点不在 stability edge
-- **缺口：** 手册要求至少一个 divergent run；sweep 至全量 1e-2 仍稳定；**已启动** 2e-2/5e-2（g52 GPU 4/5）
+- **相关 divergent 现象：** `ts_ablate_no_rmsnorm_lr3em3`（无 RMSNorm + lr=3e-3）训练后期 **loss→NaN**；说明 stability edge 与架构有关，baseline SwiGLU+pre-norm+RMSNorm 在 5e-2 仍稳定
+- **缺口：** 严格意义上 baseline 模型无 divergent LR run；可引用 ablation NaN 或继续尝试 lr≥1e-1
 
 ---
 
@@ -127,9 +136,9 @@ TinyStories ~17M 参数 Transformer LM。实验分两轮：**g27 低资源**（4
 **交付：**
 
 - 低资源（41M tokens）：bs=1, 4, 16；结论见 7.2
-- 全量：bs=64 即 `ts_lr3em4`（val=1.469）；g68 正在跑 bs=16（56%）、bs=128（50%）
-- bs=1/4 全量因步数过多（32万~128万 steps）已取消；低资源版仍可引用
-- **缺口：** 全量 bs=128 结果待完成；未对每个 batch 单独重调 LR
+- 全量（lr=3e-4）：bs64 **1.469**、bs16 **1.473**、bs128 **1.512**
+- 全量 LR scaling：bs64@6e-3 **1.327**；bs128@6e-3/1e-2 **1.311**（优于 bs64@3e-4）
+- bs=1/4 全量因步数过多已取消；低资源版仍可引用
 
 ---
 
@@ -173,9 +182,10 @@ TinyStories ~17M 参数 Transformer LM。实验分两轮：**g27 低资源**（4
 
 **交付：**
 
-- Run：`ts_ablate_no_rmsnorm`（lr=3e-4）
-- 低资源 valid loss 1.840 vs baseline 1.832；训练未崩溃
-- g68 全量版进行中
+- Run：`ts_ablate_no_rmsnorm`（lr=3e-4 / 3e-3）
+- 低资源：1.840 vs baseline 1.832；训练未崩溃
+- 全量 lr=3e-4：val=**1.483**（baseline 1.469）；lr=3e-3：训练后期 **NaN**（无法与 baseline 1.331 公平对比）
+- **评论：** RMSNorm 对高 LR 训练稳定性至关重要；lr=3e-4 下移除 RMSNorm 仅略差（+0.014）
 
 ---
 
@@ -194,8 +204,8 @@ TinyStories ~17M 参数 Transformer LM。实验分两轮：**g27 低资源**（4
 **交付：**
 
 - Run：`ts_ablate_post_norm`
-- 低资源：post-norm 1.824 vs pre-norm baseline 1.832（略好，差距小）
-- g68 全量版进行中
+- 低资源：post-norm 1.824 vs pre-norm 1.832（略好，差距小）
+- 全量 lr=3e-4：val=**1.464**（−0.005）；lr=3e-3：val=**1.358**（baseline 1.331，+0.027）
 
 ---
 
@@ -214,8 +224,9 @@ TinyStories ~17M 参数 Transformer LM。实验分两轮：**g27 低资源**（4
 **交付：**
 
 - Run：`ts_ablate_no_rope`（NoPE）vs baseline（RoPE）
-- 低资源：NoPE 1.926，RoPE baseline 1.832；RoPE 影响最大
-- g68 全量版进行中
+- 低资源：NoPE 1.926 vs RoPE 1.832
+- 全量 lr=3e-4：val=**1.547**（+0.078）；lr=3e-3：val=**1.395**（+0.064）
+- **评论：** RoPE 在全量下影响最大；NoPE 仍收敛但明显更差
 
 ---
 
@@ -236,8 +247,9 @@ TinyStories ~17M 参数 Transformer LM。实验分两轮：**g27 低资源**（4
 **交付：**
 
 - Run：`ts_ablate_silu_ffn`（SiLU, d_ff=2048）vs baseline SwiGLU
-- 低资源：SiLU 1.888 vs SwiGLU 1.832；gating 有收益
-- g68 全量版进行中
+- 低资源：SiLU 1.888 vs SwiGLU 1.832
+- 全量 lr=3e-4：val=**1.492**（+0.023）；lr=3e-3：val=**1.341**（+0.010）
+- **评论：** SwiGLU gating 有稳定收益；参数量匹配下 SiLU 略差
 
 ---
 
@@ -256,7 +268,51 @@ TinyStories ~17M 参数 Transformer LM。实验分两轮：**g27 低资源**（4
 - 与 TinyStories losses 差异及解释
 - OWT 生成文本 + fluency 分析（为何同 compute 质量更差）
 
-**交付：** 未开始。数据已 tokenize：`data/tokenized/owt_train.npy`，可用 `./run_section7.sh owt [gpu]` 启动。
+**交付：** ✅ 完成
+
+| 参数 | 值 |
+|------|-----|
+| Run | `owt_bs64_lr3em3_20000` |
+| batch / lr | 64 / 3e-3 |
+| max-iters | 20,000（327M tokens） |
+| **final valid loss** | **3.985** @ step 19500 |
+| wall time | ~**222 min**（13340s） |
+| checkpoint | `experiments/section7/owt_bs64_lr3em3_20000/checkpoint_final.pt` |
+| 生成样例 | `experiments/section7/generate_owt/` |
+| wandb | [owt_bs64_lr3em3_20000](https://wandb.ai/steven144-nanjing-university/cs336-section7/runs/zn79v918) |
+
+**Learning curve（valid loss 采样）：**
+
+| step | OWT valid | TinyStories valid（`ts_lr3em3`） |
+|------|-----------|----------------------------------|
+| 0 | 10.39 | 9.25 |
+| 500 | 5.71 | 2.53 |
+| 4500 | 4.54 | 1.68 |
+| 19500 | **3.99** | **1.33** |
+
+**Loss 差异解释：**
+
+- OWT 词表 32k，随机 baseline CE ≈ log(32000) ≈ **10.4**；实测 step 0 val=10.39。TinyStories step 0 val=9.25（词表 10k），OWT 起点略高且 **下降更慢**（500 step: 5.71 vs 2.53）
+- OWT 文本更长尾、主题/语法更多样，17M 模型 + 327M tokens 仍严重 underfit（train loss ~4.0 仍高）
+- 同 compute budget 下 OWT val 停留在 ~4.0，TS 可达 ~1.33——数值差主要来自 **任务难度 + 词表**，而非训练 bug
+
+**生成与 fluency（prompt: `Once upon a time`）：**
+
+| 配置 | fluency | 现象 |
+|------|---------|------|
+| t=0 greedy | ★☆☆ | 短句后陷入重复："the world is not a place to live" 循环 |
+| t=0.8, p=0.95 | ★★☆ | 局部像新闻/对话，但人名、时间线、因果混乱（"Paul… Vietnam… gunman… 2007"） |
+| t=1.0, p=0.95 | ★☆☆ | 主题漂移、乱码式 token 组合（"monkey plotting tree plots"） |
+
+**为何同 compute 质量更差：**
+
+1. **数据复杂度：** OWT 是真实 web 文本，需要 world knowledge + 长程依赖；TinyStories 是受限童话语域，模式简单
+2. **Underfitting：** val≈4.0 说明模型对 OWT 仍接近「弱预测」；TS val≈1.33 已拟合较好
+3. **Prompt 不匹配：** `Once upon a time` 偏童话，OWT 训练分布更偏新闻/论坛，greedy 易落入高频通用句式的重复
+
+样例（greedy）见 `generate_owt/generated_t0_greedy.txt`；完整对比见 `generate_owt/` vs `generate_full/`。
+
+~~`owt_bs64_lr3em3_80000`~~ 已在 step ~300 kill（预估 ~19 h > 6 h 上限）。
 
 ---
 
@@ -267,8 +323,11 @@ TinyStories ~17M 参数 Transformer LM。实验分两轮：**g27 低资源**（4
 
 | 用途                             | 路径                                                   |
 | ------------------------------ | ---------------------------------------------------- |
-| **全量最佳模型**（lr=3e-3, val=1.331） | `experiments/section7/ts_lr3em3/checkpoint_final.pt` |
+| **全量最佳模型**（lr=6e-3, val=1.327） | `experiments/section7/ts_bs64_lr6em3/checkpoint_final.pt` |
+| 全量 LR sweep 最佳（lr=3e-3, val=1.331） | `experiments/section7/ts_lr3em3/checkpoint_final.pt` |
 | 达标全量模型（lr=3e-4, val=1.469）     | `experiments/section7/ts_lr3em4/checkpoint_final.pt` |
+| batch-LR 最佳（bs128@6e-3, val=1.311） | `experiments/section7/ts_bs128_lr6em3/checkpoint_final.pt` |
+| OWT 模型 + 生成样例               | `experiments/section7/owt_bs64_lr3em3_20000/checkpoint_final.pt` + `generate_owt/` |
 | 生成样例（低资源）                      | `experiments/section7/generated_lr3em3.txt`          |
 | 生成样例（全量，7 组 decoding）          | `experiments/section7/generate_full/`                |
 
@@ -285,8 +344,60 @@ TinyStories ~17M 参数 Transformer LM。实验分两轮：**g27 低资源**（4
 | 训练                 | `train.py`                                                                     |
 | 生成                 | `generate_text.py`                                                             |
 | 启动器                | `run_section7.sh`, `run_section7_wave2.sh`, `run_section7_g52_wave2.sh`        |
-| Checkpoints / logs | `experiments/section7/`                                                        |
+| Checkpoints / logs | `experiments/section7/`（gitignored）                                            |
+| 交付用图表              | `figures/section7/`                                                            |
 | wandb              | [cs336-section7](https://wandb.ai/steven144-nanjing-university/cs336-section7) |
+| wandb 命名工具         | `scripts/section7_names.sh`, `scripts/organize_wandb_section7.py`              |
+
+
+### WandB 命名规范
+
+Project 固定为 **`cs336-section7`**。本地 checkpoint 目录名保持不变（如 `ts_lr3em3`）；WandB 用 **group + 可读 run name** 分层，避免低资源/全量同名冲突。
+
+**Group 格式：** `{dataset}/{tier}/{category}`
+
+| category | 含义 | group 示例 |
+|----------|------|------------|
+| `lr_sweep` | LR 扫描 | `ts/full/lr_sweep` |
+| `lr_diverge` | Edge of stability | `ts/full/lr_diverge` |
+| `batch` | Batch size（固定 lr=3e-4） | `ts/low/batch` |
+| `batch_lr` | Batch + LR scaling | `ts/full/batch_lr` |
+| `ablation` | 架构消融 | `ts/full/ablation` |
+| `baseline` | 重复 baseline | `ts/full/baseline` |
+| `main` | OWT 主实验 | `owt/full/main` |
+
+**tier：** `full`（327M tokens）vs `low`（41M tokens，`LOW_RESOURCE=1`）
+
+**Run name 格式：**
+
+| 实验类型 | 格式 | 示例 |
+|----------|------|------|
+| LR / batch | `bs{B}_lr{lr}` | `bs64_lr3e-3` |
+| Ablation | `{variant}__bs{B}_lr{lr}` | `no_rope__bs64_lr3e-4` |
+| OWT | `bs{B}_lr{lr}__{k}k` | `bs64_lr3e-3__20k` |
+
+**旧名 → 新名对照（常见）：**
+
+| 旧 wandb / checkpoint 名 | 新 group | 新 run name |
+|--------------------------|----------|-------------|
+| `ts_lr3em3`（全量） | `ts/full/lr_sweep` | `bs64_lr3e-3` |
+| `ts_lr3em3`（低资源） | `ts/low/lr_sweep` | `bs16_lr3e-3` |
+| `ts_lr_diverge_2em2` | `ts/full/lr_diverge` | `bs64_lr2e-2` |
+| `ts_bs128_lr6em3` | `ts/full/batch_lr` | `bs128_lr6e-3` |
+| `ts_ablate_no_rope_lr3em3` | `ts/full/ablation` | `no_rope__bs64_lr3e-3` |
+| `owt_bs64_lr3em3_20000` | `owt/full/main` | `bs64_lr3e-3__20k` |
+
+> `em` 后缀（如 `3em3` = `3e-3`）仅用于 **checkpoint 目录**，WandB 显示统一为 `3e-3`。
+
+**整理已有 runs：**
+
+```bash
+# 预览
+.venv/bin/python scripts/organize_wandb_section7.py
+
+# 同步到 wandb 云端
+.venv/bin/python scripts/organize_wandb_section7.py --apply
+```
 
 
 
@@ -297,12 +408,12 @@ TinyStories ~17M 参数 Transformer LM。实验分两轮：**g27 低资源**（4
 | ID   | Problem             | g27 低资源          | g52/g68 全量                     |
 | ---- | ------------------- | ---------------- | ------------------------------ |
 | 7.1  | experiment_log      | ✅ wandb          | ✅ 同 project                    |
-| 7.2a | learning_rate sweep | ✅ 7 runs         | ✅ 7 runs（g52 wave1+2）          |
-| 7.2b | edge of stability   | ✅ 2 runs         | 🔄 diverge 2e-2/5e-2 g52        |
-| 7.2  | batch_size          | ✅ bs=1/4/16      | 🔄 bs=16/128 g68（~50–56%）      |
+| 7.2a | learning_rate sweep | ✅ 7 runs         | ✅ 7 runs + **6e-3** 补跑          |
+| 7.2b | edge of stability   | ✅ 2 runs         | ✅ 4 runs；baseline 无 NaN ⚠️     |
+| 7.2  | batch_size          | ✅ bs=1/4/16      | ✅ bs16/64/128 + LR scaling      |
 | 7.2  | generate            | ✅ 低资源 checkpoint | ✅ 全量 `ts_lr3em3` + 7 组 decoding |
-| 7.3  | ablations           | ✅ 4 runs         | 🔄 4 runs g68（50–75%）          |
-| 7.4  | OWT                 | ❌                | ❌                              |
+| 7.3  | ablations           | ✅ 4 runs         | ✅ 8 runs（lr=3e-4/3e-3 各 4）    |
+| 7.4  | OWT                 | ❌                | ✅ 训练 + 生成                         |
 
 
 ---
@@ -330,29 +441,34 @@ TinyStories ~17M 参数 Transformer LM。实验分两轮：**g27 低资源**（4
 
 ## 7.2a Learning Rate Sweep
 
-**搜索策略**：对数均匀扫描 `1e-5 → 1e-2`，cosine decay 在训练结束时降至 min_lr=3e-5。扫 LR 时固定 batch size，不重扫 batch。
+**搜索策略**：对数均匀扫描 `1e-5 → 1e-2`（7 点），cosine decay 在训练结束时降至 min_lr=3e-5。固定 batch=64、20k steps。主扫完成后，在 batch-LR 实验中补跑 **6e-3**（`ts_bs64_lr6em3`，配置与 sweep 相同，纳入 LR curve）。
 
 ### g52 全量（batch=64, 20k steps）
 
 
 | Run           | LR       | Final valid loss | Wall time          | 状态          |
 | ------------- | -------- | ---------------- | ------------------ | ----------- |
-| **ts_lr3em3** | **3e-3** | **1.331**        | ~~3734s (~~62 min) | ✅ **全量最佳**  |
-| ts_lr1em2     | 1e-2     | 1.332            | ~3739s             | ✅ 未发散       |
-| ts_lr1em3     | 1e-3     | 1.371            | ~3728s             | ✅           |
-| **ts_lr3em4** | 3e-4（默认） | **1.469**        | ~~4302s (~~72 min) | ✅ 达标（≤1.45） |
-| ts_lr1em4     | 1e-4     | 1.653            | ~4302s             | ✅           |
-| ts_lr3em5     | 3e-5     | 1.899            | ~4302s             | ✅           |
-| ts_lr1em5     | 1e-5     | 2.065            | ~4302s             | ✅           |
+| **ts_bs64_lr6em3** | **6e-3** | **1.327**   | ~63 min            | ✅ **全量最佳**（补跑） |
+| **ts_lr3em3** | 3e-3     | 1.331            | ~62 min            | ✅ LR sweep   |
+| ts_lr1em2     | 1e-2     | 1.332            | ~62 min            | ✅ 未发散       |
+| ts_lr1em3     | 1e-3     | 1.371            | ~62 min            | ✅           |
+| **ts_lr3em4** | 3e-4（默认） | **1.469**        | ~72 min            | ✅ 达标（≤1.45） |
+| ts_lr1em4     | 1e-4     | 1.653            | ~72 min            | ✅           |
+| ts_lr3em5     | 3e-5     | 1.899            | ~72 min            | ✅           |
+| ts_lr1em5     | 1e-5     | 2.065            | ~72 min            | ✅           |
 
 
-Wave 1（GPU 4–7）：1e-5 ~ 3e-4；Wave 2（GPU 4–6）：1e-3 ~ 1e-2。baseline 重复 run 已取消（`ts_lr3em4` 已足够）。
+Wave 1（GPU 4–7）：1e-5 ~ 3e-4；Wave 2（GPU 4–6）：1e-3 ~ 1e-2；**6e-3** 在 batch-LR 阶段补跑（g52 GPU 6）。baseline 重复 run 已取消（`ts_lr3em4` 已足够）。
 
 **结论：**
 
-- 最优 LR 为 **3e-3**（val=1.331），优于默认 3e-4（1.469）约 0.14。
-- Loss 随 LR 呈近似 U 型：1e-5（2.07）→ 3e-3（1.33）→ 1e-2（1.33）；1e-2 未劣化但也未发散。
-- 默认 lr=3e-4 已满足作业 ≤1.45；若追求更好 checkpoint 用 `ts_lr3em3`。
+- 最优 LR 为 **6e-3**（val=**1.327**，`ts_bs64_lr6em3`），略优于 3e-3（1.331）和 1e-2（1.332）；最优点在 3e-3 ~ 1e-2 之间。
+- Loss 随 LR 呈近似 U 型：1e-5（2.07）→ 6e-3（1.33）→ 1e-2（1.33）；继续增大至 2e-2（1.36）、5e-2（1.61）仍无 NaN，见 7.2b。
+- 默认 lr=3e-4（1.469）已满足作业 ≤1.45；若追求更好 checkpoint 用 `ts_bs64_lr6em3` 或 `ts_lr3em3`。
+
+![LR sweep + edge of stability](figures/section7/lr_sweep_full.png)
+
+> 图：`figures/section7/lr_sweep_full.png`（蓝线 = LR sweep + 6e-3 补跑；橙虚线 = 7.2b diverge 2e-2/5e-2；脚本 `scripts/plot_lr_sweep.py`）
 
 
 
@@ -395,19 +511,24 @@ Wave 1（GPU 4–7）：1e-5 ~ 3e-4；Wave 2（GPU 4–6）：1e-3 ~ 1e-2。base
 
 ## 7.2b Edge of Stability
 
+与 7.2a 同一配置（全量 bs=64、20k steps），在 sweep 范围外继续增大 LR。**曲线见上方 LR sweep 图（橙虚线）。**
 
-| Run                | 配置     | LR   | Final valid loss | 是否发散 |
-| ------------------ | ------ | ---- | ---------------- | ---- |
-| ts_lr_diverge_5em3 | 低资源    | 5e-3 | 1.713            | 否    |
-| ts_lr_diverge_1em2 | 低资源    | 1e-2 | 1.766            | 否    |
-| ts_lr1em2          | **全量** | 1e-2 | 1.332            | 否    |
-| ts_lr_diverge_2em2 | **全量** | 2e-2 | —                | 🔄   |
-| ts_lr_diverge_5em2 | **全量** | 5e-2 | —                | 🔄   |
+| Run                | 配置     | LR   | Final valid loss | Wall time | 是否发散 |
+| ------------------ | ------ | ---- | ---------------- | --------- | ---- |
+| ts_lr_diverge_5em3 | 低资源    | 5e-3 | 1.713            | ~9 min    | 否    |
+| ts_lr_diverge_1em2 | 低资源    | 1e-2 | 1.766            | ~15 min   | 否    |
+| ts_lr1em2          | **全量** | 1e-2 | 1.332            | ~62 min   | 否（=sweep 末点） |
+| ts_lr_diverge_2em2 | **全量** | 2e-2 | **1.358**        | ~73 min   | 否    |
+| ts_lr_diverge_5em2 | **全量** | 5e-2 | **1.608**        | ~73 min   | 否（变差但未 NaN） |
+| ts_ablate_no_rmsnorm_lr3em3 | 全量 ablation | 3e-3 | **NaN** | ~68 min | **是** |
+
+**全量 LR → val 序列（含 sweep）：** 1e-5（2.07）→ … → 6e-3（**1.327**）→ 1e-2（1.33）→ 2e-2（1.36）→ 5e-2（1.61）
 
 
 - 低资源：最优 3e-3（1.690）优于 5e-3 和 1e-2；1e-2 有过拟合迹象（train 1.64 vs valid 1.77）。
-- 全量：1e-2 仍稳定且 val≈3e-3，未观测到 divergent behavior。
-- **待补 / 进行中：** 2e-2 / 5e-2 全量 diverge run（g52 GPU 4/5，`ts_lr_diverge_2em2` / `ts_lr_diverge_5em2`）
+- 全量 baseline：LR 至 5e-2 仍无 NaN；2e-2 甚至 val=1.358 接近最优 1.331，说明 baseline 架构 stability margin 很大。
+- 5e-2 时 valid 升至 1.608，loss 曲线可观察到 degradation，但非 handbook 意义的 divergent（无爆炸/NaN）。
+- **唯一 NaN：** 移除 RMSNorm + lr=3e-3（`ts_ablate_no_rmsnorm_lr3em3`），说明 normalization 对高 LR 稳定性至关重要。
 
 ---
 
@@ -425,7 +546,24 @@ Wave 1（GPU 4–7）：1e-5 ~ 3e-4；Wave 2（GPU 4–6）：1e-3 ~ 1e-2。base
 | ts_bs1  | 1     | 159,500 | 2.285            | ~2828s    |
 
 
-batch 越大越好；全量 bs=64 baseline val=1.469。g68 全量 bs=16/128 进行中，完成后更新下表。
+batch 越大越好（低资源）。全量结果（327M tokens）：
+
+| Run | Batch | LR | Final valid loss | Wall time | 状态 |
+|-----|-------|-----|-----------------|-----------|------|
+| `ts_lr3em4` / `ts_bs64` | 64 | 3e-4 | 1.469 | ~73 min | ✅ baseline |
+| **`ts_bs64_lr6em3`** | 64 | **6e-3** | **1.327** | ~63 min | ✅ |
+| **`ts_bs16`** | 16 | 3e-4 | **1.473** | ~101 min | ✅ 80k steps |
+| `ts_bs128` | 128 | 3e-4 | 1.512 | ~63 min | ✅ |
+| **`ts_bs128_lr6em3`** | 128 | **6e-3** | **1.311** | ~61 min | ✅ 最佳 |
+| `ts_bs128_lr1em2` | 128 | 1e-2 | 1.312 | ~61 min | ✅ |
+| `ts_bs128_lr3em3` | 128 | 3e-3 | 1.324 | ~61 min | ✅ |
+| `ts_bs128_lr2em2` | 128 | 2e-2 | 1.325 | ~61 min | ✅ |
+
+**讨论要点：**
+- 固定 token budget、lr=3e-4：bs16 **1.473** ≈ bs64 **1.469** > bs128 **1.512**；小 batch 并非更差
+- bs128@3e-4 差于 bs64，**线性 LR scaling**（×2 batch → ×2 LR）有效：6e-3 时 bs128 **1.311** 优于 bs64@3e-4
+- 固定 token budget 下 bs128 wall time 仅比 bs64 快 ~14%（非 2×），因每 step 计算量更大
+- bs16 需 80k steps、~101 min，最慢；bs128@6e-3 质量最佳且 ~61 min
 
 ---
 
@@ -476,7 +614,7 @@ Lily looked for Mr. Bear everywhere. She asked her friends to help her find him.
 
 ## 7.3 Ablations
 
-仅低资源配置（lr=3e-4, batch=16, 10k steps）：
+### 低资源（lr=3e-4, batch=16, 10k steps）
 
 
 | Run                  | 改动                   | Final valid loss | vs baseline (1.832) |
@@ -487,7 +625,34 @@ Lily looked for Mr. Bear everywhere. She asked her friends to help her find him.
 | ts_ablate_no_rope    | 移除 RoPE              | 1.926            | +0.094              |
 
 
-- **RoPE** 影响最大；**SwiGLU** gating 有收益；**RMSNorm** 移除后仍稳定；**post-norm** 略优于 pre-norm（差异小）。
+### 全量 lr=3e-4（batch=64, 20k steps；baseline RoPE+pre-norm+RMSNorm+SwiGLU val=**1.469**）
+
+
+| Run                  | 改动           | Final valid loss | Δ vs baseline |
+| -------------------- | ------------ | ---------------- | ------------- |
+| ts_ablate_post_norm  | post-norm    | **1.464**        | −0.005        |
+| ts_ablate_no_rmsnorm | 无 RMSNorm    | **1.483**        | +0.014        |
+| ts_ablate_silu_ffn   | SiLU FFN     | **1.492**        | +0.023        |
+| ts_ablate_no_rope    | NoPE         | **1.547**        | +0.078        |
+
+
+### 全量 lr=3e-3（batch=64, 20k steps；baseline val=**1.331**）
+
+
+| Run                  | 改动           | Final valid loss | Δ vs baseline | 备注        |
+| -------------------- | ------------ | ---------------- | ------------- | --------- |
+| ts_ablate_silu_ffn   | SiLU FFN     | **1.341**        | +0.010        | ✅         |
+| ts_ablate_post_norm  | post-norm    | **1.358**        | +0.027        | ✅         |
+| ts_ablate_no_rope    | NoPE         | **1.395**        | +0.064        | ✅         |
+| ts_ablate_no_rmsnorm | 无 RMSNorm    | **NaN**          | —             | 训练崩溃 ⚠️ |
+
+
+**结论：**
+
+- **RoPE** 影响最大（全量 +0.06~0.08）；NoPE 仍收敛但明显更差
+- **SwiGLU** gating 有稳定收益（+0.01~0.02）；SiLU 参数量匹配下略差
+- **RMSNorm**：lr=3e-4 下移除仅 +0.014；lr=3e-3 下移除导致 **NaN**——normalization 是高 LR 训练的关键
+- **post-norm vs pre-norm**：差异很小（≤0.03），低资源甚至 post-norm 略好
 
 ---
 
@@ -495,38 +660,46 @@ Lily looked for Mr. Bear everywhere. She asked her friends to help her find him.
 
 ## 7.4 OpenWebText
 
-未开始。
+**Run：** `owt_bs64_lr3em3_20000`（g68 GPU 0，2026-07-24，~222 min）
+
+| 参数 | TinyStories 最佳 | OWT |
+|------|-----------------|-----|
+| 词表 | 10,000 | 32,000 |
+| tokens | 327M | 327M |
+| batch / lr | 64 / 3e-3 | 64 / 3e-3 |
+| final valid loss | **1.331** | **3.985** |
+| 状态 | ✅ | ✅ |
+
+详见上方 **Problem (main_experiment)** 的 loss 对比、生成样例与 fluency 分析。
+
+**生成命令：**
+
+```bash
+CKPT=experiments/section7/owt_bs64_lr3em3_20000/checkpoint_final.pt
+CUDA_VISIBLE_DEVICES=0 .venv/bin/python generate_text.py \
+  --checkpoint $CKPT \
+  --vocab-file data/owt_vocab.json --merges-file data/owt_merges.txt \
+  --vocab-size 32000 --temperature 0 --top-p 0.95 \
+  --output experiments/section7/generate_owt/generated_t0_greedy.txt
+```
 
 ---
 
 
 
-## g68 全量 Ablation + Batch Size（2026-07-23 23:57 进度）
+## 全量实验完成摘要（2026-07-24 更新）
 
-固定 327M tokens、lr=3e-4。RoPE baseline 全量 val=**1.469**（`ts_lr3em4`）。
-
-**Ablation（GPU 0–3 并行，~62 min/run）**
+以下 g52/g68/g26/g32 任务均已跑完：
 
 
-| Run                  | 进度             | 状态  |
-| -------------------- | -------------- | --- |
-| ts_ablate_no_rmsnorm | ~10k/20k (50%) | 🔄  |
-| ts_ablate_post_norm  | ~10k/20k (50%) | 🔄  |
-| ts_ablate_no_rope    | ~15k/20k (75%) | 🔄  |
-| ts_ablate_silu_ffn   | ~15k/20k (75%) | 🔄  |
-
-
-**Batch Size（GPU 6–7；bs=1/4 已取消）**
-
-
-| Run      | Batch | Iters  | 进度             | 状态                       |
-| -------- | ----- | ------ | -------------- | ------------------------ |
-| ts_bs16  | 16    | 80,000 | ~45k/80k (56%) | 🔄 ~50 min 剩余            |
-| ts_bs128 | 128   | 10,000 | ~5k/10k (50%)  | 🔄 ~20 min 剩余            |
-| ts_bs64  | 64    | 20,000 | —              | ✅ 即 `ts_lr3em4` baseline |
-
-
-> bs=1/4 全量步数过多（32万~128万 steps）已取消；低资源版 bs=1/4 见 7.2 节。
+| 类别 | Runs | 状态 |
+|------|------|------|
+| LR sweep（7 + 6e-3） | `ts_lr*` + `ts_bs64_lr6em3` | ✅ |
+| LR diverge（2 全量） | `ts_lr_diverge_2em2`, `ts_lr_diverge_5em2` | ✅ |
+| Batch size（3 + 5 LR scaling） | `ts_bs16`, `ts_bs128`, `ts_bs64_lr6em3`, `ts_bs128_lr*` | ✅ |
+| Ablation lr=3e-4（4） | `ts_ablate_*` | ✅ |
+| Ablation lr=3e-3（4） | `ts_ablate_*_lr3em3` | ✅（no_rmsnorm NaN） |
+| **OWT** | `owt_bs64_lr3em3_20000` + `generate_owt/` | ✅ |
 
 ---
 
@@ -539,9 +712,13 @@ Lily looked for Mr. Bear everywhere. She asked her friends to help her find him.
 | --- | ----------------------------- | ------ |
 | g27 | 低资源 LR / batch / ablation     | ✅ 完成   |
 | g52 | 全量 LR sweep wave1+2           | ✅ 完成   |
-| g52 | diverge 2e-2 / 5e-2             | 🔄 GPU 4/5 |
-| g68 | 全量 ablation + batch bs=16/128 | 🔄 进行中 |
-| g34 | OWT / diverge（建议）             | ❌ 未启动  |
+| g52 | diverge 2e-2 / 5e-2             | ✅ 完成   |
+| g52 | batch-lr bs64@6e-3, bs128@1e-2 | ✅ 完成   |
+| g68 | batch-lr bs128 sweep            | ✅ 完成   |
+| g68 | ablation lr=3e-4（×4）            | ✅ 完成   |
+| g26 | ablation lr=3e-3（×3）            | ✅ 完成   |
+| g32 | ablation silu lr=3e-3           | ✅ 完成   |
+| g68 | OWT 20k steps + generate          | ✅ 完成   |
 
 
 注意：全量 run 与低资源 run **同名**，`experiments/section7/ts_lr`* 的 checkpoint 已被全量结果覆盖（低资源数值保留在本文档和 wandb 历史 run 中）。
@@ -566,11 +743,14 @@ CUDA_VISIBLE_DEVICES=6 .venv/bin/python generate_text.py \
   --output experiments/section7/generate_full/generated_t0_greedy.txt
 # 其他 decoding 组合见 generate_full/ 目录
 
-# OWT（g34 等空闲 GPU）
-./run_section7.sh owt 0
+# OWT（327M tokens = 20k steps）
+./run_section7.sh owt <gpu> --batch-size 64 --max-iters 20000 --lr 3e-3
 
-# Diverge 补跑（2e-2, 5e-2；start=2 跳过已跑过的 5e-3/1e-2）
-./run_section7.sh lr-diverge 2 4 5
+# Batch-LR scaling 示例
+./run_section7.sh batch-lr 128 4:6e-3 5:3e-3 6:1e-2
+
+# Ablation（lr=3e-3）
+./run_section7.sh ablations --lr 3e-3 0 1 2 3
 ```
 
 
@@ -579,5 +759,5 @@ CUDA_VISIBLE_DEVICES=6 .venv/bin/python generate_text.py \
 
 - `generate_text.py` 最初用 `torch.optim.AdamW` 加载 checkpoint 会失败（自定义 AdamW state 格式不同），已改为只加载 model weights。
 - `run_section7_wave2.sh` 的 diverge 段有重复启动逻辑，不影响 checkpoint 有效性。
-- g82/g83/g26 glibc 2.17，无法运行当前 `.venv`。
+- g82/g83/g85（glibc 2.17）无法运行当前 `.venv`；g26 为 glibc 2.35，环境正常。
 

@@ -5,6 +5,8 @@ ROOT="$(cd "$(dirname "$0")" && pwd)"
 cd "$ROOT"
 export LOW_RESOURCE=1
 GPU="${1:-0}"
+# shellcheck source=scripts/section7_names.sh
+source "$ROOT/scripts/section7_names.sh"
 
 echo "[wave2] waiting for wave-1 jobs..."
 while pgrep -f "train.py.*experiments/section7/ts_lr[13]em[45]" >/dev/null 2>&1; do
@@ -33,7 +35,9 @@ for bs in 1 4 16; do
     --train-data data/tokenized/tinystories_train.npy \
     --valid-data data/tokenized/tinystories_valid.npy \
     --checkpoint-dir "$ckpt" \
-    --wandb-project cs336-section7 --wandb-run-name "ts_bs${bs}" \
+    --wandb-project cs336-section7 \
+    --wandb-group "$(section7_wandb_group_ts batch)" \
+    --wandb-run-name "$(section7_wandb_name_bs_lr "$bs" "3e-4")" \
     --batch-size "$bs" --max-iters "$iters" --lr 3e-4 \
     --warmup-iters "$warmup" --cosine-cycle-iters "$iters" \
     > "experiments/section7/logs/ts_bs${bs}.log" 2>&1
@@ -52,7 +56,9 @@ for spec in "no_rmsnorm --no-rmsnorm" "post_norm --post-norm" "no_rope --no-rope
     --train-data data/tokenized/tinystories_train.npy \
     --valid-data data/tokenized/tinystories_valid.npy \
     --checkpoint-dir "$ckpt" \
-    --wandb-project cs336-section7 --wandb-run-name "ts_ablate_${name}" \
+    --wandb-project cs336-section7 \
+    --wandb-group "$(section7_wandb_group_ts ablation)" \
+    --wandb-run-name "$(section7_wandb_name_ablate "$name" 16 "3e-4")" \
     --batch-size 16 --max-iters "$iters" --lr 3e-4 \
     --warmup-iters "$warmup" --cosine-cycle-iters "$iters" \
     "$@" \

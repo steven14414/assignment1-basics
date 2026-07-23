@@ -20,6 +20,8 @@ OWT_TRAIN="data/tokenized/owt_train.npy"
 OWT_VALID="data/tokenized/owt_valid.npy"
 EXP_DIR="experiments/section7"
 mkdir -p "$EXP_DIR/logs"
+# shellcheck source=scripts/section7_names.sh
+source "$ROOT/scripts/section7_names.sh"
 
 # Shared GPUs (vLLM co-tenant): use smaller batches and fewer tokens.
 if [[ "${LOW_RESOURCE:-0}" == "1" ]]; then
@@ -38,18 +40,21 @@ iters_for_batch() {
 run_train() {
   local name="$1"
   local gpu="$2"
-  shift 2
+  local wandb_group="$3"
+  local wandb_name="$4"
+  shift 4
   local ckpt_dir="$EXP_DIR/$name"
   mkdir -p "$ckpt_dir"
   local log="$EXP_DIR/logs/${name}.log"
 
-  echo "Starting $name on GPU $gpu -> $log"
+  echo "Starting $name on GPU $gpu (wandb: ${wandb_group}/${wandb_name}) -> $log"
   CUDA_VISIBLE_DEVICES="$gpu" nohup "$PYTHON" train.py \
     --train-data "$TRAIN_DATA" \
     --valid-data "$VALID_DATA" \
     --checkpoint-dir "$ckpt_dir" \
     --wandb-project cs336-section7 \
-    --wandb-run-name "$name" \
+    --wandb-group "$wandb_group" \
+    --wandb-run-name "$wandb_name" \
     "$@" \
     > "$log" 2>&1 &
   echo "$!" > "$EXP_DIR/logs/${name}.pid"
@@ -58,19 +63,22 @@ run_train() {
 run_owt_train() {
   local name="$1"
   local gpu="$2"
-  shift 2
+  local wandb_group="$3"
+  local wandb_name="$4"
+  shift 4
   local ckpt_dir="$EXP_DIR/$name"
   mkdir -p "$ckpt_dir"
   local log="$EXP_DIR/logs/${name}.log"
 
-  echo "Starting $name on GPU $gpu -> $log"
+  echo "Starting $name on GPU $gpu (wandb: ${wandb_group}/${wandb_name}) -> $log"
   CUDA_VISIBLE_DEVICES="$gpu" nohup "$PYTHON" train.py \
     --train-data "$OWT_TRAIN" \
     --valid-data "$OWT_VALID" \
     --vocab-size 32000 \
     --checkpoint-dir "$ckpt_dir" \
     --wandb-project cs336-section7 \
-    --wandb-run-name "$name" \
+    --wandb-group "$wandb_group" \
+    --wandb-run-name "$wandb_name" \
     "$@" \
     > "$log" 2>&1 &
   echo "$!" > "$EXP_DIR/logs/${name}.pid"
@@ -83,6 +91,7 @@ case "${1:-help}" in
     ITERS=$(iters_for_batch "$BS")
     WARMUP=$((ITERS / 10))
     run_train "ts_baseline_bs${BS}_lr3e-4" "$GPU" \
+      "$(section7_wandb_group_ts baseline)" "$(section7_wandb_name_bs_lr "$BS" "3e-4")" \
       --batch-size "$BS" --max-iters "$ITERS" --lr 3e-4 \
       --warmup-iters "$WARMUP" --cosine-cycle-iters "$ITERS"
     ;;
@@ -103,9 +112,9 @@ case "${1:-help}" in
       idx=$((START + i))
       if [[ $idx -ge ${#LRS[@]} ]]; then break; fi
       lr="${LRS[$idx]}"
-      lr_tag="${lr//./p}"
-      lr_tag="${lr_tag/e-/em}"
+      lr_tag="$(section7_lr_tag "$lr")"
       run_train "ts_lr${lr_tag}" "$gpu" \
+        "$(section7_wandb_group_ts lr_sweep)" "$(section7_wandb_name_bs_lr "$BS" "$lr")" \
         --batch-size "$BS" --max-iters "$ITERS" --lr "$lr" \
         --warmup-iters "$WARMUP" --cosine-cycle-iters "$ITERS"
       i=$((i + 1))
@@ -128,12 +137,30 @@ case "${1:-help}" in
       idx=$((START + i))
       if [[ $idx -ge ${#LRS[@]} ]]; then break; fi
       lr="${LRS[$idx]}"
-      lr_tag="${lr//./p}"
-      lr_tag="${lr_tag/e-/em}"
+      lr_tag="$(section7_lr_tag "$lr")"
       run_train "ts_lr_diverge_${lr_tag}" "$gpu" \
+        "$(section7_wandb_group_ts lr_diverge)" "$(section7_wandb_name_bs_lr "$BS" "$lr")" \
         --batch-size "$BS" --max-iters "$ITERS" --lr "$lr" \
         --warmup-iters "$WARMUP" --cosine-cycle-iters "$ITERS"
       i=$((i + 1))
+    done
+    ;;
+
+  batch-lr)
+    BS="${2:?batch size required}"
+    shift 2
+    ITERS=$(iters_for_batch "$BS")
+    WARMUP=$((ITERS / 10))
+    while [[ $# -gt 0 ]]; do
+      spec="$1"
+      shift
+      gpu="${spec%%:*}"
+      lr="${spec#*:}"
+      lr_tag="$(section7_lr_tag "$lr")"
+      run_train "ts_bs${BS}_lr${lr_tag}" "$gpu" \
+        "$(section7_wandb_group_ts batch_lr)" "$(section7_wandb_name_bs_lr "$BS" "$lr")" \
+        --batch-size "$BS" --max-iters "$ITERS" --lr "$lr" \
+        --warmup-iters "$WARMUP" --cosine-cycle-iters "$ITERS"
     done
     ;;
 
@@ -152,6 +179,7 @@ case "${1:-help}" in
       iters=$(iters_for_batch "$bs")
       warmup=$((iters / 10))
       run_train "ts_bs${bs}" "$gpu" \
+        "$(section7_wandb_group_ts batch)" "$(section7_wandb_name_bs_lr "$bs" "3e-4")" \
         --batch-size "$bs" --max-iters "$iters" --lr 3e-4 \
         --warmup-iters "$warmup" --cosine-cycle-iters "$iters"
       i=$((i + 1))
@@ -159,31 +187,52 @@ case "${1:-help}" in
     ;;
 
   ablations)
+    LR=3e-4
+    START=0
     shift
+    if [[ "${1:-}" == --lr ]]; then
+      LR="$2"
+      shift 2
+    fi
+    if [[ "${1:-}" =~ ^[0-9]+$ ]]; then
+      START="$1"
+      shift
+    fi
+    lr_tag="$(section7_lr_tag "$LR")"
+    SUFFIX=""
+    if [[ "$LR" != "3e-4" ]]; then
+      SUFFIX="_lr${lr_tag}"
+    fi
     BS="${DEFAULT_BS}"
     ITERS=$(iters_for_batch "$BS")
     WARMUP=$((ITERS / 10))
+    WANDB_GROUP="$(section7_wandb_group_ts ablation)"
     i=0
     for gpu in "$@"; do
-      case "$i" in
+      idx=$((START + i))
+      case "$idx" in
         0)
-          run_train "ts_ablate_no_rmsnorm" "$gpu" \
-            --batch-size "$BS" --max-iters "$ITERS" --lr 3e-4 --no-rmsnorm \
+          run_train "ts_ablate_no_rmsnorm${SUFFIX}" "$gpu" \
+            "$WANDB_GROUP" "$(section7_wandb_name_ablate no_rmsnorm "$BS" "$LR")" \
+            --batch-size "$BS" --max-iters "$ITERS" --lr "$LR" --no-rmsnorm \
             --warmup-iters "$WARMUP" --cosine-cycle-iters "$ITERS"
           ;;
         1)
-          run_train "ts_ablate_post_norm" "$gpu" \
-            --batch-size "$BS" --max-iters "$ITERS" --lr 3e-4 --post-norm \
+          run_train "ts_ablate_post_norm${SUFFIX}" "$gpu" \
+            "$WANDB_GROUP" "$(section7_wandb_name_ablate post_norm "$BS" "$LR")" \
+            --batch-size "$BS" --max-iters "$ITERS" --lr "$LR" --post-norm \
             --warmup-iters "$WARMUP" --cosine-cycle-iters "$ITERS"
           ;;
         2)
-          run_train "ts_ablate_no_rope" "$gpu" \
-            --batch-size "$BS" --max-iters "$ITERS" --lr 3e-4 --no-rope \
+          run_train "ts_ablate_no_rope${SUFFIX}" "$gpu" \
+            "$WANDB_GROUP" "$(section7_wandb_name_ablate no_rope "$BS" "$LR")" \
+            --batch-size "$BS" --max-iters "$ITERS" --lr "$LR" --no-rope \
             --warmup-iters "$WARMUP" --cosine-cycle-iters "$ITERS"
           ;;
         3)
-          run_train "ts_ablate_silu_ffn" "$gpu" \
-            --batch-size "$BS" --max-iters "$ITERS" --lr 3e-4 --ffn-type silu --d-ff 2048 \
+          run_train "ts_ablate_silu_ffn${SUFFIX}" "$gpu" \
+            "$WANDB_GROUP" "$(section7_wandb_name_ablate silu_ffn "$BS" "$LR")" \
+            --batch-size "$BS" --max-iters "$ITERS" --lr "$LR" --ffn-type silu --d-ff 2048 \
             --warmup-iters "$WARMUP" --cosine-cycle-iters "$ITERS"
           ;;
         *) break ;;
@@ -193,12 +242,24 @@ case "${1:-help}" in
     ;;
 
   owt)
-    GPU="${2:-0}"
-    BS="${DEFAULT_BS}"
-    ITERS=$(iters_for_batch "$BS")
+    GPU=0
+    BS=64
+    ITERS=20000
+    LR="3e-4"
+    shift
+    while [[ $# -gt 0 ]]; do
+      case "$1" in
+        --batch-size) BS="$2"; shift 2 ;;
+        --max-iters) ITERS="$2"; shift 2 ;;
+        --lr) LR="$2"; shift 2 ;;
+        *) GPU="$1"; shift ;;
+      esac
+    done
     WARMUP=$((ITERS / 10))
-    run_owt_train "owt_baseline_bs${BS}" "$GPU" \
-      --batch-size "$BS" --max-iters "$ITERS" --lr 3e-4 \
+    lr_tag="$(section7_lr_tag "$LR")"
+    run_owt_train "owt_bs${BS}_lr${lr_tag}_${ITERS}" "$GPU" \
+      "$(section7_wandb_group_owt)" "$(section7_wandb_name_owt "$BS" "$LR" "$ITERS")" \
+      --batch-size "$BS" --max-iters "$ITERS" --lr "$LR" \
       --warmup-iters "$WARMUP" --cosine-cycle-iters "$ITERS"
     ;;
 
@@ -226,9 +287,10 @@ Usage:
   ./run_section7.sh baseline [gpu]
   ./run_section7.sh lr-sweep gpu0 gpu1 ...
   ./run_section7.sh lr-diverge [start_idx] gpu0 gpu1 ...
+  ./run_section7.sh batch-lr <batch> gpu:lr [gpu:lr ...]
   ./run_section7.sh batch-sweep gpu0 gpu1 ...
-  ./run_section7.sh ablations gpu0 gpu1 gpu2 gpu3
-  ./run_section7.sh owt [gpu]
+  ./run_section7.sh ablations [--lr LR] gpu0 gpu1 gpu2 gpu3
+  ./run_section7.sh owt [gpu] [--batch-size N] [--max-iters N] [--lr LR]
   ./run_section7.sh generate <checkpoint> [gpu] [output]
   ./run_section7.sh status
 EOF

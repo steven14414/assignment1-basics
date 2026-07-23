@@ -37,7 +37,13 @@ def setup_wandb(args) -> None:
     if "WANDB_API_KEY" not in os.environ and (api_key := settings.get("api_key")):
         wandb.login(key=api_key, relogin=True)
 
-    init_kwargs = {"project": args.wandb_project, "name": args.wandb_run_name, "config": vars(args)}
+    init_kwargs = {
+        "project": args.wandb_project,
+        "name": args.wandb_run_name,
+        "config": vars(args),
+    }
+    if args.wandb_group:
+        init_kwargs["group"] = args.wandb_group
     if entity := settings.get("entity"):
         init_kwargs["entity"] = entity
     wandb.init(**init_kwargs)
@@ -202,6 +208,7 @@ def parse_args():
     parser.add_argument("--checkpoint-interval", type=int, default=5000)
     parser.add_argument("--wandb-project", type=str, default="cs336-basics")
     parser.add_argument("--wandb-run-name", type=str, default=None)
+    parser.add_argument("--wandb-group", type=str, default=None)
     parser.add_argument("--no-wandb", action="store_true")
 
     return parser.parse_args()
