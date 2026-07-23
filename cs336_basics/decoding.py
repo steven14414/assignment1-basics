@@ -7,7 +7,7 @@ from .softmax import softmax
 def decoding(
     model,
     token_ids: torch.Tensor,
-    max_tokens: int = 512,
+    max_tokens: int = 256,
     temperature: float = 0.7,
     top_p: float = 0.95,
     end_token_id: int | None = None,

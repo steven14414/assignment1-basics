@@ -162,6 +162,7 @@ cython_debug/
 .ruff_cache/
 .uv-cache/
 data/
+experiments/
 *.zip
 .vscode/settings.json
 1.py

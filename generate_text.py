@@ -35,7 +35,7 @@ def parse_args():
     parser = argparse.ArgumentParser(description="Generate text from a trained Transformer LM checkpoint.")
     parser.add_argument("--checkpoint", type=str, required=True)
     parser.add_argument("--prompt", type=str, default=DEFAULT_PROMPT)
-    parser.add_argument("--max-tokens", type=int, default=512)
+    parser.add_argument("--max-tokens", type=int, default=256)
     parser.add_argument("--temperature", type=float, default=0.8)
     parser.add_argument("--top-p", type=float, default=0.95)
     parser.add_argument("--device", type=str, default="cuda")
